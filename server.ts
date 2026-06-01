@@ -267,7 +267,11 @@ app.get('/api/video/:taskId', async (req, res) => {
       timeout: 30_000,
     });
 
-    if ((data as any).status === 'completed' && (data as any).video_url) {
+    // 实际 API 返回的视频 URL 在 remixed_from_video_id 字段（文档中 video_url 字段不存在）
+    const videoUrl: string | undefined =
+      (data as any).video_url || (data as any).remixed_from_video_id;
+
+    if ((data as any).status === 'completed' && videoUrl) {
       const videoDir = path.join(OUTPUT_DIR, 'videos');
       const existing = fs.readdirSync(videoDir)
         .filter(f => !f.endsWith('.task.json') && !f.endsWith('.meta.json'))
@@ -279,7 +283,7 @@ app.get('/api/video/:taskId', async (req, res) => {
       const model = String((data as any).model ?? 'unknown').replace(/[^a-z0-9.-]/gi, '_');
       const filebase = `${stamp()}_${model}_${req.params.taskId}`;
       const filename = `${filebase}.mp4`;
-      await downloadFile((data as any).video_url, path.join(videoDir, filename));
+      await downloadFile(videoUrl, path.join(videoDir, filename));
 
       // 读取任务 meta 并保存为视频 meta
       const taskMetaPath = path.join(videoDir, `${req.params.taskId}.task.json`);

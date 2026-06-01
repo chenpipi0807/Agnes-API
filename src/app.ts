@@ -567,7 +567,7 @@ function initVideo() {
 
   function updateSecondsMax() {
     const fps = parseInt(fpsSelect.value) || 24;
-    const maxSec = Math.floor(441 / fps * 10) / 10;
+    const maxSec = Math.floor(441 / fps);
     secInput.max = String(maxSec);
     if (parseFloat(secInput.value) > maxSec) secInput.value = String(maxSec);
   }
