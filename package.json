@@ -1,0 +1,23 @@
+{
+  "name": "agnes-ai-studio",
+  "version": "1.0.0",
+  "description": "Agnes AI API Studio — Text / Image / Video",
+  "scripts": {
+    "build": "esbuild src/app.ts --bundle --outfile=public/app.js --target=es2020 --minify",
+    "dev": "concurrently \"esbuild src/app.ts --bundle --outfile=public/app.js --watch --target=es2020\" \"ts-node server.ts\"",
+    "start": "npm run build && ts-node server.ts"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "concurrently": "^8.2.0",
+    "esbuild": "^0.21.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}

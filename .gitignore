@@ -1,0 +1,4 @@
+node_modules/
+output/
+.env
+public/app.js

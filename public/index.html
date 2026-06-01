@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agnes AI Studio</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<style>
+/* ── Reset & Variables ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0b0b0f;
+  --surface:  #13131a;
+  --card:     #1c1c28;
+  --border:   #2a2a3d;
+  --primary:  #818cf8;
+  --primary2: #6366f1;
+  --text:     #e2e8f0;
+  --muted:    #5a6072;
+  --ok:       #4ade80;
+  --err:      #f87171;
+  --warn:     #fbbf24;
+  --radius:   10px;
+  --gap:      12px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-wrap: wrap;
+}
+
+header h1 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+.key-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.key-area label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  margin-bottom: 0;
+}
+
+.key-area input {
+  flex: 1;
+  max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+  font-family: monospace;
+}
+
+.key-area input:focus { border-color: var(--primary); }
+
+#key-status {
+  font-size: 12px;
+  min-width: 80px;
+  white-space: nowrap;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────── */
+.layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 53px);
+}
+
+.main-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar {
+  width: 268px;
+  min-width: 220px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  width: fit-content;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 7px 22px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.tab-btn:hover { color: var(--text); background: var(--card); }
+.tab-btn.active { background: var(--primary2); color: #fff; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Card ────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+/* ── Form elements ───────────────────────────────────────────────────── */
+label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="number"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+
+input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+textarea { resize: vertical; min-height: 80px; }
+select option { background: var(--card); }
+
+.field { display: flex; flex-direction: column; }
+.row { display: flex; gap: var(--gap); }
+.row .field { flex: 1; }
+
+/* Range slider */
+.range-row { display: flex; align-items: center; gap: 10px; }
+input[type="range"] {
+  flex: 1; accent-color: var(--primary);
+  padding: 0; height: 4px; border: none; background: transparent;
+}
+.range-val { min-width: 30px; text-align: right; font-size: 12px; color: var(--primary); font-weight: 600; }
+
+/* Toggle */
+.toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.toggle-row input[type="checkbox"] { width: auto; accent-color: var(--primary); }
+
+/* URL rows (legacy) */
+.url-row { display: flex; gap: 6px; align-items: center; }
+.url-row input { flex: 1; }
+
+/* Image input rows — local-primary design */
+.img-input-row { display: flex; flex-direction: column; gap: 5px; }
+
+.img-row-main { display: flex; gap: 6px; align-items: center; }
+
+.img-upload-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--surface);
+  border: 1.5px dashed var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  color: var(--muted);
+  user-select: none;
+  min-height: 36px;
+}
+.img-upload-zone:hover { border-color: var(--primary); color: var(--primary); }
+.img-upload-zone.has-file { border-style: solid; border-color: var(--ok); color: var(--ok); }
+
+.upload-icon { font-size: 14px; flex-shrink: 0; }
+.upload-label-text { flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.url-secondary { display: flex; align-items: center; gap: 6px; }
+.url-or { font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.url-secondary input { flex: 1; font-size: 12px; padding: 5px 8px; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btn {
+  background: var(--primary2);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.btn:hover:not(:disabled) { background: var(--primary); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-sm {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.btn-sm:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sm:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.file-lbl {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.btn-icon {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 5px;
+  width: 28px; height: 28px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover { border-color: var(--err); color: var(--err); }
+
+.btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hidden { display: none !important; }
+
+/* ── Status ──────────────────────────────────────────────────────────── */
+.status { font-size: 12px; min-height: 16px; transition: color 0.15s; color: var(--muted); }
+.status-loading { color: var(--warn); }
+.status-success { color: var(--ok); }
+.status-error   { color: var(--err); }
+
+/* ── Result areas ─────────────────────────────────────────────────────── */
+.result-area {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  min-height: 80px;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.result-area:empty::before { content: '输出结果将显示在这里…'; color: var(--muted); }
+
+.result-img {
+  max-width: 100%; max-height: 480px;
+  border-radius: 8px; display: block; margin-bottom: 10px;
+}
+
+.result-video {
+  max-width: 100%; max-height: 380px;
+  border-radius: 8px; display: block; margin-bottom: 10px;
+}
+
+.dl-link {
+  display: inline-block; color: var(--primary);
+  font-size: 12px; text-decoration: none; margin-top: 6px;
+}
+.dl-link:hover { text-decoration: underline; }
+.video-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── 任务状态框 ────────────────────────────────────────────────────────── */
+.task-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.task-id { font-family: monospace; color: var(--text); }
+.task-progress { color: var(--primary); font-weight: 600; }
+
+/* ── 侧边栏 ────────────────────────────────────────────────────────────── */
+.sidebar-header { display: flex; align-items: center; justify-content: space-between; }
+.sidebar-header h2 { font-size: 12px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.6px; }
+
+.out-section { display: flex; flex-direction: column; gap: 6px; }
+.out-section h3 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+
+/* 历史卡片 */
+.out-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.out-card:last-child { border-bottom: none; }
+
+.out-thumb { width: 100%; max-height: 100px; object-fit: cover; border-radius: 5px; }
+.out-icon { font-size: 22px; padding: 2px 0; }
+
+.out-info { display: flex; flex-direction: column; gap: 4px; }
+
+.out-model {
+  display: inline-block;
+  font-size: 10px;
+  background: rgba(99,102,241,.15);
+  color: var(--primary);
+  border: 1px solid rgba(99,102,241,.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.out-prompt {
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.out-input-thumbs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.out-input-thumb {
+  width: 38px; height: 38px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.out-input-local {
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-size: 16px;
+}
+
+.out-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+}
+.out-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 10px;
+  word-break: break-all;
+  line-height: 1.4;
+  flex: 1;
+  transition: color 0.15s;
+}
+.out-link:hover { color: var(--primary); }
+
+.reuse-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 3px 8px;
+  color: var(--primary);
+  border-color: rgba(99,102,241,.4);
+  background: rgba(99,102,241,.07);
+}
+.reuse-btn:hover { background: rgba(99,102,241,.2); border-color: var(--primary); }
+
+.out-empty { font-size: 11px; color: var(--muted); font-style: italic; }
+
+/* ── 任务队列 ────────────────────────────────────────────────────────── */
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+
+.task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.task-card--active { border-color: rgba(251,191,36,.5); }
+
+.tc-row { display: flex; align-items: center; gap: 8px; }
+.tc-id {
+  font-family: monospace; font-size: 10px; color: var(--muted);
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tc-status {
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  padding: 2px 7px; border-radius: 4px;
+}
+.ts-ok      { background: rgba(74,222,128,.12);  color: var(--ok); }
+.ts-err     { background: rgba(248,113,113,.12); color: var(--err); }
+.ts-pending { background: rgba(251,191,36,.12);  color: var(--warn); }
+
+.tc-time { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.tc-prompt { font-size: 11px; color: var(--text); line-height: 1.4; word-break: break-word; }
+
+.tpbar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+.tpbar-fill { height: 100%; background: var(--warn); border-radius: 2px; transition: width 0.5s; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header>
+  <h1>Agnes AI Studio</h1>
+  <div class="key-area">
+    <label for="apiKey">API Key</label>
+    <input type="password" id="apiKey" placeholder="输入或修改你的 API Key…" autocomplete="off" />
+    <button id="btn-save-key" class="btn-sm">保存</button>
+    <a href="https://platform.agnes-ai.com/settings/apiKeys" target="_blank" rel="noopener" class="btn-sm" style="text-decoration:none;">获取 Key ↗</a>
+    <span id="key-status" class="status"></span>
+  </div>
+</header>
+
+<!-- ── Layout ──────────────────────────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- 主内容区 -->
+  <div class="main-area">
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="text">💬 文本</button>
+      <button class="tab-btn" data-tab="image">🖼 图像</button>
+      <button class="tab-btn" data-tab="video">🎬 视频</button>
+    </div>
+
+    <!-- ── 文本面板 ────────────────────────────────────────────────────── -->
+    <div id="panel-text" class="tab-panel active">
+      <form id="chat-form" class="card">
+        <div class="card-title">文本生成</div>
+
+        <div class="row">
+          <div class="field">
+            <label for="chat-model">模型</label>
+            <select id="chat-model">
+              <option value="agnes-2.0-flash">agnes-2.0-flash（推荐）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="chat-format">保存格式</label>
+            <select id="chat-format">
+              <option value="txt">.txt（纯文本）</option>
+              <option value="md">.md（Markdown）</option>
+              <option value="json">.json（完整响应）</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="chat-system">系统提示（可选）</label>
+          <textarea id="chat-system" rows="2" placeholder="你是一个有用的 AI 助手。"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="chat-user">用户消息 *</label>
+          <textarea id="chat-user" rows="5" placeholder="在这里输入你的消息…"></textarea>
+        </div>
+
+        <!-- 参数设置 -->
+        <div class="card" style="background:var(--surface);padding:12px;gap:10px;">
+          <div class="card-title" style="font-size:11px;">参数设置</div>
+          <div class="row">
+            <div class="field">
+              <label>温度（随机性）</label>
+              <div class="range-row">
+                <input type="range" id="chat-temp" min="0" max="2" step="0.1" value="0.7" />
+                <span class="range-val" id="chat-temp-val">0.7</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="chat-maxtokens">最大 Token 数（可选）</label>
+              <input type="number" id="chat-maxtokens" placeholder="如：1024" min="1" max="65536" />
+            </div>
+          </div>
+          <label class="toggle-row">
+            <input type="checkbox" id="chat-stream" />
+            启用流式输出（打字机效果）
+          </label>
+        </div>
+
+        <div class="btn-row">
+          <button type="submit" id="chat-submit" class="btn">生成</button>
+          <button type="button" id="chat-copy" class="btn-sm">复制</button>
+          <span id="chat-status" class="status"></span>
+        </div>
+      </form>
+
+      <div class="card" style="gap:8px;">
+        <div class="card-title">回复内容</div>
+        <div id="chat-result" class="result-area"></div>
+      </div>
+    </div>
+
+    <!-- ── 图像面板 ────────────────────────────────────────────────────── -->
+    <div id="panel-image" class="tab-panel">
+      <form id="image-form" class="card">
+        <div class="card-title">图像生成</div>
+
+        <div class="row">
+          <div class="field">
+            <label for="image-model">模型</label>
+            <select id="image-model">
+              <option value="agnes-image-2.1-flash">agnes-image-2.1-flash（推荐）</option>
+              <option value="agnes-image-2.0-flash">agnes-image-2.0-flash</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="image-mode">模式</label>
+            <select id="image-mode">
+              <option value="txt2img">文字生图</option>
+              <option value="img2img">图生图</option>
+              <option value="multi">多图合成（仅 2.0-flash）</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="image-prompt">提示词 *</label>
+          <textarea id="image-prompt" rows="4"
+            placeholder="一座漂浮在迷雾峡谷上空的发光城市，日出时分，电影级写实风格，广角构图…"></textarea>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="image-size">尺寸</label>
+            <select id="image-size">
+              <optgroup label="── 16:9 横屏 ──">
+                <option value="1280x720">16:9 · 1280 × 720</option>
+                <option value="1920x1080">16:9 · 1920 × 1080</option>
+              </optgroup>
+              <optgroup label="── 9:16 竖屏 ──">
+                <option value="720x1280">9:16 · 720 × 1280</option>
+                <option value="1080x1920">9:16 · 1080 × 1920</option>
+              </optgroup>
+              <optgroup label="── 1:1 正方形 ──">
+                <option value="1024x1024">1:1 · 1024 × 1024</option>
+                <option value="768x768">1:1 · 768 × 768</option>
+              </optgroup>
+              <optgroup label="── 4:3 / 3:4 ──">
+                <option value="1024x768" selected>4:3 · 1024 × 768</option>
+                <option value="1280x960">4:3 · 1280 × 960</option>
+                <option value="768x1024">3:4 · 768 × 1024</option>
+              </optgroup>
+              <optgroup label="── 3:2 / 2:3 ──">
+                <option value="1152x768">3:2 · 1152 × 768</option>
+                <option value="768x1152">2:3 · 768 × 1152</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="field">
+            <label for="image-seed">随机种子（可选，2.0-flash）</label>
+            <input type="number" id="image-seed" placeholder="如：42" />
+          </div>
+        </div>
+
+        <!-- 图片输入（图生图 / 多图合成时显示） -->
+        <div id="image-input-section" style="display:none;">
+          <div class="field">
+            <label>输入图片</label>
+            <div id="image-urls" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button type="button" id="add-image-url" class="btn-sm" style="margin-top:6px;width:fit-content;">+ 添加图片</button>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button type="submit" id="image-submit" class="btn">生成图片</button>
+          <span id="image-status" class="status"></span>
+        </div>
+      </form>
+
+      <div class="card" style="gap:8px;">
+        <div class="card-title">生成结果</div>
+        <div id="image-result"></div>
+      </div>
+    </div>
+
+    <!-- ── 视频面板 ────────────────────────────────────────────────────── -->
+    <div id="panel-video" class="tab-panel">
+      <form id="video-form" class="card">
+        <div class="card-title">视频生成</div>
+
+        <div class="row">
+          <div class="field">
+            <label for="video-model">模型</label>
+            <select id="video-model">
+              <option value="agnes-video-v2.0">agnes-video-v2.0（推荐）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="video-mode">模式</label>
+            <select id="video-mode">
+              <option value="text">文字生视频</option>
+              <option value="image">图生视频</option>
+              <option value="multi">多图视频</option>
+              <option value="keyframe">关键帧动画</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="video-prompt">提示词 *</label>
+          <textarea id="video-prompt" rows="4"
+            placeholder="一只猫在日落时漫步沙滩，柔和的海浪声，温暖的金色光线，写实风格…"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="video-negative">反向提示词（可选）</label>
+          <textarea id="video-negative" rows="2" placeholder="模糊，扭曲，低质量…"></textarea>
+        </div>
+
+        <!-- 图片输入（非纯文字模式时显示） -->
+        <div id="video-input-section" style="display:none;">
+          <div class="field">
+            <label>输入图片</label>
+            <div id="video-urls" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button type="button" id="add-video-url" class="btn-sm" style="margin-top:6px;width:fit-content;">+ 添加图片</button>
+          </div>
+        </div>
+
+        <!-- 参数设置 -->
+        <div class="card" style="background:var(--surface);padding:12px;gap:10px;">
+          <div class="card-title" style="font-size:11px;">参数设置</div>
+          <div class="field">
+            <label for="video-preset">尺寸预设</label>
+            <select id="video-preset">
+              <option value="1152x768" selected>3:2 横屏（默认）· 1152 × 768</option>
+              <option value="1280x720">16:9 HD · 1280 × 720</option>
+              <option value="1920x1080">16:9 FHD · 1920 × 1080</option>
+              <option value="720x1280">9:16 竖屏 · 720 × 1280</option>
+              <option value="1080x1920">9:16 竖屏大 · 1080 × 1920</option>
+              <option value="1024x1024">1:1 正方形 · 1024 × 1024</option>
+              <option value="768x768">1:1 小 · 768 × 768</option>
+              <option value="1024x768">4:3 · 1024 × 768</option>
+              <option value="768x1024">3:4 · 768 × 1024</option>
+              <option value="">自定义…</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="video-width">宽度（px）</label>
+              <input type="number" id="video-width" value="1152" min="256" max="1920" step="8" />
+            </div>
+            <div class="field">
+              <label for="video-height">高度（px）</label>
+              <input type="number" id="video-height" value="768" min="256" max="1920" step="8" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="video-seconds">时长（秒）</label>
+              <input type="number" id="video-seconds" value="5" min="1" step="0.5" />
+            </div>
+            <div class="field">
+              <label for="video-fps">帧率（FPS，范围 1–60）</label>
+              <select id="video-fps">
+                <option value="8">8 fps（慢动作/定格）</option>
+                <option value="12">12 fps（动画风格）</option>
+                <option value="16">16 fps</option>
+                <option value="24" selected>24 fps（电影标准）</option>
+                <option value="25">25 fps（PAL / 欧洲标准）</option>
+                <option value="30">30 fps（网络视频）</option>
+                <option value="48">48 fps（高帧率电影）</option>
+                <option value="60">60 fps（流畅 / 游戏）</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="max-width:200px;">
+            <label for="video-seed">随机种子（可选）</label>
+            <input type="number" id="video-seed" placeholder="随机" />
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button type="submit" id="video-submit" class="btn">创建任务</button>
+          <span id="video-status" class="status"></span>
+        </div>
+      </form>
+
+      <!-- 任务队列 -->
+      <div class="card" style="gap:8px;">
+        <div class="card-title">任务队列</div>
+        <div id="task-list" class="task-list"></div>
+      </div>
+    </div>
+
+  </div><!-- /main-area -->
+
+  <!-- ── 已保存文件 ──────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>已保存文件</h2>
+      <button id="btn-refresh" class="btn-sm">↻ 刷新</button>
+    </div>
+
+    <div class="out-section">
+      <h3>文本</h3>
+      <div id="out-text"><span class="out-empty">加载中…</span></div>
+    </div>
+
+    <div class="out-section">
+      <h3>图片</h3>
+      <div id="out-images"><span class="out-empty">加载中…</span></div>
+    </div>
+
+    <div class="out-section">
+      <h3>视频</h3>
+      <div id="out-videos"><span class="out-empty">加载中…</span></div>
+    </div>
+  </aside>
+
+</div><!-- /layout -->
+
+<script src="app.js"></script>
+</body>
+</html>
