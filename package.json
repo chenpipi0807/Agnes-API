@@ -5,7 +5,7 @@
   "scripts": {
     "build": "esbuild src/app.ts --bundle --outfile=public/app.js --target=es2020 --minify",
     "dev": "concurrently \"esbuild src/app.ts --bundle --outfile=public/app.js --watch --target=es2020\" \"ts-node server.ts\"",
-    "start": "npm run build && ts-node server.ts"
+    "start": "ts-node server.ts"
   },
   "dependencies": {
     "axios": "^1.7.0",
