@@ -5,7 +5,19 @@
   "scripts": {
     "build": "esbuild src/app.ts --bundle --outfile=public/app.js --target=es2020 --minify",
     "dev": "concurrently \"esbuild src/app.ts --bundle --outfile=public/app.js --watch --target=es2020\" \"ts-node server.ts\"",
-    "start": "ts-node server.ts"
+    "start": "ts-node server.ts",
+    "compile": "tsc -p tsconfig.server.json",
+    "pkg": "npm run build && npm run compile && npx @yao-pkg/pkg dist/server.js --config package.json --compress GZip"
+  },
+  "pkg": {
+    "assets": ["public/**/*"],
+    "targets": [
+      "node20-win-x64",
+      "node20-macos-x64",
+      "node20-macos-arm64",
+      "node20-linux-x64"
+    ],
+    "outputPath": "release"
   },
   "dependencies": {
     "axios": "^1.7.0",
@@ -15,6 +27,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",
+    "@yao-pkg/pkg": "^5.13.0",
     "concurrently": "^8.2.0",
     "esbuild": "^0.21.0",
     "ts-node": "^10.9.0",

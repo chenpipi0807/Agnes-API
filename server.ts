@@ -1,18 +1,26 @@
-import 'dotenv/config';
+import * as path from 'path';
+import * as fs from 'fs';
+
+// pkg 打包后 process.pkg 存在；__dirname 指向快照内部，可执行文件实际路径用 process.execPath
+const isPkg = !!(process as any).pkg;
+const APP_DIR   = isPkg ? path.dirname(process.execPath) : __dirname;
+const PUBLIC_DIR = isPkg ? path.join(__dirname, '..', 'public') : path.join(__dirname, 'public');
+
+import dotenv from 'dotenv';
+dotenv.config({ path: path.join(APP_DIR, '.env') });
+
 import express from 'express';
 import axios from 'axios';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/output', express.static(path.join(__dirname, 'output')));
+app.use(express.static(PUBLIC_DIR));
+app.use('/output', express.static(path.join(APP_DIR, 'output')));
 
 const BASE_URL = 'https://apihub.agnes-ai.com/v1';
 let API_KEY = process.env.AGNES_API_KEY || '';
-const OUTPUT_DIR = path.join(__dirname, 'output');
-const ENV_PATH = path.join(__dirname, '.env');
+const OUTPUT_DIR = path.join(APP_DIR, 'output');
+const ENV_PATH   = path.join(APP_DIR, '.env');
 
 for (const dir of ['text', 'images', 'videos', 'uploads']) {
   fs.mkdirSync(path.join(OUTPUT_DIR, dir), { recursive: true });
