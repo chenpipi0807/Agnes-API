@@ -190,9 +190,16 @@ app.post('/api/config', (req, res) => {
   res.json({ ok: true, site: currentSite, apiKey: activeKey(), sites: siteList() });
 });
 
-// ── 模型列表（按站点实时拉取，失败回退内置列表）─────────────────────────────
+// ── 模型列表 ─────────────────────────────────────────────────────────────────
+//
+// 需求：官方上新模型后前端要能自动出现，同时历史模型不能消失（老用户还在用）。
+// 做法：实时结果 ∪ 本机缓存 ∪ 内置基线，三者取并集；
+//      实时接口没返回、但基线/缓存里有的模型标记为 legacy，前端显示「旧」。
 
-const MODEL_FALLBACK: Record<SiteId, { chat: string[]; image: string[]; video: string[] }> = {
+interface ModelSet { chat: string[]; image: string[]; video: string[] }
+
+// 内置基线：接口异常或首次离线时的保底清单，同时用于保留历史模型
+const MODEL_FALLBACK: Record<SiteId, ModelSet> = {
   intl: {
     chat:  ['agnes-2.5-flash', 'agnes-2.0-flash'],
     image: ['agnes-image-2.1-flash', 'agnes-image-2.0-flash'],
@@ -205,9 +212,32 @@ const MODEL_FALLBACK: Record<SiteId, { chat: string[]; image: string[]; video: s
   },
 };
 
+const MODEL_CACHE_PATH = path.join(APP_DIR, 'models.cache.json');
+
+// 最近一次实时拉取到的模型（落盘，重启后仍保留，避免接口抖动导致列表缩水）
+function loadDiscovered(): Partial<Record<SiteId, ModelSet>> {
+  try { return JSON.parse(fs.readFileSync(MODEL_CACHE_PATH, 'utf-8')); } catch { return {}; }
+}
+
+let discovered: Partial<Record<SiteId, ModelSet>> = loadDiscovered();
+
+function rememberModels(site: SiteId, models: ModelSet): void {
+  const prev = discovered[site];
+  // 与上次结果取并集：曾经出现过、这次接口没返回的模型也保留下来
+  discovered = {
+    ...discovered,
+    [site]: {
+      chat:  unionModels(models.chat,  prev?.chat  ?? []),
+      image: unionModels(models.image, prev?.image ?? []),
+      video: unionModels(models.video, prev?.video ?? []),
+    },
+  };
+  try { fs.writeFileSync(MODEL_CACHE_PATH, JSON.stringify(discovered, null, 2), 'utf-8'); } catch { /* 只读目录忽略 */ }
+}
+
 const modelCache = new Map<SiteId, { at: number; data: any }>();
 
-function classifyModels(ids: string[]) {
+function classifyModels(ids: string[]): ModelSet {
   const isVideo = (id: string) => /video/i.test(id);
   const isImage = (id: string) => /image/i.test(id);
   const isOther = (id: string) => /embed|tts|whisper|rerank|moderation/i.test(id);
@@ -218,25 +248,67 @@ function classifyModels(ids: string[]) {
   };
 }
 
+// 去重合并，保持先出现的顺序
+function unionModels(...groups: string[][]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const group of groups) {
+    for (const id of group) {
+      if (id && !seen.has(id)) { seen.add(id); out.push(id); }
+    }
+  }
+  return out;
+}
+
+async function fetchLiveModels(site: SiteId): Promise<ModelSet | null> {
+  const key = apiKeys[site];
+  if (!key) return null;
+  try {
+    const { data: raw } = await axios.get(`${SITES[site].baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${key}` },
+      timeout: 10_000,
+    });
+    const ids: string[] = (raw?.data ?? []).map((m: any) => m?.id).filter(Boolean);
+    return ids.length ? classifyModels(ids) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function modelsFor(site: SiteId) {
   const cached = modelCache.get(site);
   if (cached && Date.now() - cached.at < 5 * 60_000) return cached.data;
 
-  const key = apiKeys[site];
-  let data: any = null;
+  const live = await fetchLiveModels(site);
+  if (live) rememberModels(site, live);
 
-  if (key) {
-    try {
-      const { data: raw } = await axios.get(`${SITES[site].baseUrl}/models`, {
-        headers: { Authorization: `Bearer ${key}` },
-        timeout: 10_000,
-      });
-      const ids: string[] = (raw?.data ?? []).map((m: any) => m?.id).filter(Boolean);
-      if (ids.length) data = { ...classifyModels(ids), source: 'live' };
-    } catch { /* 走兜底列表 */ }
-  }
+  const base = MODEL_FALLBACK[site];
+  const known = discovered[site];
+  // 优先用本次实时结果，其次用上次缓存的实时结果，最后才用内置基线
+  const primary = live ?? known ?? { chat: [], image: [], video: [] };
 
-  if (!data) data = { ...MODEL_FALLBACK[site], source: key ? 'fallback' : 'offline' };
+  const merged: ModelSet = {
+    chat:  unionModels(primary.chat,  known?.chat  ?? [], base.chat),
+    image: unionModels(primary.image, known?.image ?? [], base.image),
+    video: unionModels(primary.video, known?.video ?? [], base.video),
+  };
+
+  // 当前接口没返回、靠缓存或基线补回来的，标记为 legacy
+  // 完全没有实时数据（没 Key 或首次离线）时不标记，避免全屏都是「旧」
+  const hasPrimary = primary.chat.length + primary.image.length + primary.video.length > 0;
+  const legacy: ModelSet = hasPrimary
+    ? {
+        chat:  merged.chat.filter(m => !primary.chat.includes(m)),
+        image: merged.image.filter(m => !primary.image.includes(m)),
+        video: merged.video.filter(m => !primary.video.includes(m)),
+      }
+    : { chat: [], image: [], video: [] };
+
+  const data = {
+    ...merged,
+    legacy,
+    source: live ? 'live' : known ? 'cache' : apiKeys[site] ? 'fallback' : 'offline',
+  };
 
   modelCache.set(site, { at: Date.now(), data });
   return data;
@@ -250,7 +322,6 @@ app.get('/api/models', async (_req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ── Chat completions ────────────────────────────────────────────────────────
 
 app.post('/api/chat', async (req, res) => {

@@ -277,13 +277,17 @@ function reuseVideo(meta: OutputMeta) {
 interface SiteOption { id: 'cn' | 'intl'; label: string; platform: string }
 interface ConfigResponse { site: 'cn' | 'intl'; apiKey: string; sites: SiteOption[] }
 
-// 按站点重建模型下拉框（尽量保留用户已选中的模型）
-function fillModelSelect(id: string, list?: string[]): void {
+// 按站点重建模型下拉框：实时返回的在前，靠缓存/基线补回来的标「旧」
+function fillModelSelect(id: string, list?: string[], legacy: string[] = []): void {
   if (!Array.isArray(list) || !list.length) return;
   const sel = el<HTMLSelectElement>(id);
   const prev = sel.value;
+  const legacySet = new Set(legacy);
   sel.innerHTML = list
-    .map((m, i) => `<option value="${m}">${m}${i === 0 ? '（推荐）' : ''}</option>`)
+    .map((m, i) => {
+      const tag = legacySet.has(m) ? '（旧）' : i === 0 ? '（推荐）' : '';
+      return `<option value="${m}">${m}${tag}</option>`;
+    })
     .join('');
   sel.value = list.includes(prev) ? prev : list[0];
   sel.dispatchEvent(new Event('change'));
@@ -292,9 +296,9 @@ function fillModelSelect(id: string, list?: string[]): void {
 async function refreshModels(): Promise<void> {
   try {
     const models = await get('models');
-    fillModelSelect('chat-model', models.chat);
-    fillModelSelect('image-model', models.image);
-    fillModelSelect('video-model', models.video);
+    fillModelSelect('chat-model', models.chat, models.legacy?.chat);
+    fillModelSelect('image-model', models.image, models.legacy?.image);
+    fillModelSelect('video-model', models.video, models.legacy?.video);
   } catch { /* 保留 HTML 中的默认列表 */ }
 }
 
