@@ -497,6 +497,44 @@ input[type="range"] {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── 顶部工具栏：站点选择 / Key 输入 / 按钮 布局 ────────────────────── */
+header { gap: 12px; }
+
+.key-area {
+  flex: 1 1 560px;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.key-area #site-select {
+  width: 104px;
+  flex: 0 0 104px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.key-area #apiKey {
+  flex: 1 1 320px;
+  min-width: 240px;
+  max-width: none;
+}
+
+.key-area .btn-sm,
+.key-area a.btn-sm {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#key-status { flex: 0 0 auto; min-width: 0; }
+
+@media (max-width: 760px) {
+  header h1 { font-size: 15px; }
+  .key-area { flex: 1 1 100%; }
+  .key-area #apiKey { flex: 1 1 100%; min-width: 0; }
+  #key-status { order: 9; }
+}
 </style>
 </head>
 <body>
@@ -505,10 +543,15 @@ input[type="range"] {
 <header>
   <h1>Agnes AI Studio</h1>
   <div class="key-area">
+    <label for="site-select">站点</label>
+    <select id="site-select" title="切换国内站 / 国际站">
+      <option value="intl">国际站</option>
+      <option value="cn">国内站</option>
+    </select>
     <label for="apiKey">API Key</label>
     <input type="password" id="apiKey" placeholder="输入或修改你的 API Key…" autocomplete="off" />
     <button id="btn-save-key" class="btn-sm">保存</button>
-    <a href="https://platform.agnes-ai.com/settings/apiKeys" target="_blank" rel="noopener" class="btn-sm" style="text-decoration:none;">获取 Key ↗</a>
+    <a href="https://platform.agnes-ai.com/settings/apiKeys" id="get-key-link" target="_blank" rel="noopener" class="btn-sm" style="text-decoration:none;">获取 Key ↗</a>
     <span id="key-status" class="status"></span>
   </div>
 </header>
