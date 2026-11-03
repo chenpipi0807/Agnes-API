@@ -274,15 +274,71 @@ function reuseVideo(meta: OutputMeta) {
 
 // ── API Key 管理 ─────────────────────────────────────────────────────────────
 
+interface SiteOption { id: 'cn' | 'intl'; label: string; platform: string }
+interface ConfigResponse { site: 'cn' | 'intl'; apiKey: string; sites: SiteOption[] }
+
+// 按站点重建模型下拉框（尽量保留用户已选中的模型）
+function fillModelSelect(id: string, list?: string[]): void {
+  if (!Array.isArray(list) || !list.length) return;
+  const sel = el<HTMLSelectElement>(id);
+  const prev = sel.value;
+  sel.innerHTML = list
+    .map((m, i) => `<option value="${m}">${m}${i === 0 ? '（推荐）' : ''}</option>`)
+    .join('');
+  sel.value = list.includes(prev) ? prev : list[0];
+  sel.dispatchEvent(new Event('change'));
+}
+
+async function refreshModels(): Promise<void> {
+  try {
+    const models = await get('models');
+    fillModelSelect('chat-model', models.chat);
+    fillModelSelect('image-model', models.image);
+    fillModelSelect('video-model', models.video);
+  } catch { /* 保留 HTML 中的默认列表 */ }
+}
+
 async function initApiKey() {
   const input = el<HTMLInputElement>('apiKey');
   const saveBtn = el<HTMLButtonElement>('btn-save-key');
+  const siteSel = el<HTMLSelectElement>('site-select');
   const statusEl = el('key-status');
+  const keyLink = document.getElementById('get-key-link') as HTMLAnchorElement | null;
+
+  const applyConfig = (cfg: ConfigResponse) => {
+    siteSel.value = cfg.site;
+    input.value = cfg.apiKey ?? '';
+    const info = cfg.sites?.find(s => s.id === cfg.site);
+    if (info && keyLink) keyLink.href = `${info.platform}/settings/apiKeys`;
+  };
 
   try {
-    const { apiKey } = await get('config');
-    if (apiKey) input.value = apiKey;
+    const cfg: ConfigResponse = await get('config');
+    if (!siteSel.options.length && cfg.sites) {
+      siteSel.innerHTML = cfg.sites
+        .map(s => `<option value="${s.id}">${s.label}</option>`)
+        .join('');
+    }
+    applyConfig(cfg);
+    await refreshModels();
+    if (!cfg.apiKey) setStatus(statusEl, '当前站点还没有 Key，请填写后保存', 'error');
   } catch { /* 用户自行填写 */ }
+
+  siteSel.addEventListener('change', async () => {
+    try {
+      const cfg: ConfigResponse = await post('config', { site: siteSel.value });
+      applyConfig(cfg);
+      await refreshModels();
+      if (cfg.apiKey) {
+        setStatus(statusEl, `已切换到${siteSel.options[siteSel.selectedIndex]?.text ?? ''}`, 'success');
+        setTimeout(() => setStatus(statusEl, ''), 3000);
+      } else {
+        setStatus(statusEl, '当前站点还没有 Key，请填写后保存', 'error');
+      }
+    } catch (err: any) {
+      setStatus(statusEl, `切换失败: ${err.message}`, 'error');
+    }
+  });
 
   saveBtn.addEventListener('click', async () => {
     const key = input.value.trim();
@@ -290,6 +346,7 @@ async function initApiKey() {
     setBusy(saveBtn, true);
     try {
       await post('config', { apiKey: key });
+      await refreshModels();
       setStatus(statusEl, '已保存到 .env ✓', 'success');
       setTimeout(() => setStatus(statusEl, ''), 3000);
     } catch (err: any) {

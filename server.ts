@@ -17,10 +17,54 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.static(PUBLIC_DIR));
 app.use('/output', express.static(path.join(APP_DIR, 'output')));
 
-const BASE_URL = 'https://apihub.agnes-ai.com/v1';
-let API_KEY = process.env.AGNES_API_KEY || '';
+// ── 站点（国内站 / 国际站）──────────────────────────────────────────────
+// 两个站点账号体系独立：Key 不通用，模型 ID 也不完全一致。
+
+type SiteId = 'intl' | 'cn';
+
+interface SiteInfo {
+  id: SiteId;
+  label: string;
+  baseUrl: string;
+  platform: string;
+}
+
+const SITES: Record<SiteId, SiteInfo> = {
+  intl: {
+    id: 'intl',
+    label: '国际站',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    platform: 'https://platform.agnes-ai.com',
+  },
+  cn: {
+    id: 'cn',
+    label: '国内站',
+    baseUrl: 'https://api.agnes-ai.cn/v1',
+    platform: 'https://platform.agnes-ai.cn',
+  },
+};
+
+const SITE_IDS: SiteId[] = ['cn', 'intl'];
+
+const normalizeSite = (v: string | undefined): SiteId | null =>
+  v === 'cn' || v === 'intl' ? v : null;
+
 const OUTPUT_DIR = path.join(APP_DIR, 'output');
 const ENV_PATH   = path.join(APP_DIR, '.env');
+
+let currentSite: SiteId = normalizeSite(process.env.AGNES_SITE) ?? 'intl';
+
+const apiKeys: Record<SiteId, string> = {
+  cn:   (process.env.AGNES_API_KEY_CN || '').trim(),
+  intl: (process.env.AGNES_API_KEY_INTL || '').trim(),
+};
+
+// 兼容旧版本：只有 AGNES_API_KEY 时先挂到当前站点，启动后自动识别归属
+const legacyKey = (process.env.AGNES_API_KEY || '').trim();
+if (legacyKey && !apiKeys[currentSite]) apiKeys[currentSite] = legacyKey;
+
+const baseUrl = () => SITES[currentSite].baseUrl;
+const activeKey = () => apiKeys[currentSite];
 
 for (const dir of ['text', 'images', 'videos', 'uploads']) {
   fs.mkdirSync(path.join(OUTPUT_DIR, dir), { recursive: true });
@@ -47,7 +91,7 @@ interface OutputMeta {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const authHeaders = () => ({
-  Authorization: `Bearer ${API_KEY}`,
+  Authorization: `Bearer ${activeKey()}`,
   'Content-Type': 'application/json',
 });
 
@@ -97,26 +141,114 @@ function processImages(images: string[]): { forApi: string[]; forMeta: string[] 
   return { forApi: images, forMeta };
 }
 
-// ── Config (API key read/write) ─────────────────────────────────────────────
+// ── Config（站点 / API Key 读写）─────────────────────────────────────────────
+
+function persistEnv(updates: Record<string, string>): void {
+  let content = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf-8') : '';
+  for (const [k, v] of Object.entries(updates)) {
+    const line = `${k}=${v}`;
+    const re = new RegExp(`^${k}=.*$`, 'm');
+    content = re.test(content)
+      ? content.replace(re, line)
+      : content.trimEnd() + `\n${line}\n`;
+  }
+  fs.writeFileSync(ENV_PATH, content, 'utf-8');
+}
+
+function persistSiteState(): void {
+  persistEnv({
+    AGNES_SITE: currentSite,
+    AGNES_API_KEY_CN: apiKeys.cn,
+    AGNES_API_KEY_INTL: apiKeys.intl,
+  });
+}
+
+const siteList = () =>
+  SITE_IDS.map(id => ({ id, label: SITES[id].label, platform: SITES[id].platform }));
 
 app.get('/api/config', (_req, res) => {
-  res.json({ apiKey: API_KEY });
+  res.json({ site: currentSite, apiKey: activeKey(), sites: siteList() });
 });
 
 app.post('/api/config', (req, res) => {
-  const { apiKey } = req.body as { apiKey?: string };
-  if (!apiKey || typeof apiKey !== 'string') {
-    return res.status(400).json({ error: 'apiKey 不能为空' });
+  const { site, apiKey } = req.body as { site?: SiteId; apiKey?: string };
+
+  if (site !== undefined) {
+    const next = normalizeSite(site);
+    if (!next) return res.status(400).json({ error: `未知站点: ${site}` });
+    currentSite = next;
   }
-  API_KEY = apiKey.trim();
-  let content = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf-8') : '';
-  if (/^AGNES_API_KEY=/m.test(content)) {
-    content = content.replace(/^AGNES_API_KEY=.*/m, `AGNES_API_KEY=${API_KEY}`);
-  } else {
-    content = content.trimEnd() + `\nAGNES_API_KEY=${API_KEY}\n`;
+
+  if (apiKey !== undefined) {
+    const key = String(apiKey).trim();
+    if (!key) return res.status(400).json({ error: 'apiKey 不能为空' });
+    apiKeys[currentSite] = key;
+    modelCache.delete(currentSite);
   }
-  fs.writeFileSync(ENV_PATH, content, 'utf-8');
-  res.json({ ok: true });
+
+  persistSiteState();
+  res.json({ ok: true, site: currentSite, apiKey: activeKey(), sites: siteList() });
+});
+
+// ── 模型列表（按站点实时拉取，失败回退内置列表）─────────────────────────────
+
+const MODEL_FALLBACK: Record<SiteId, { chat: string[]; image: string[]; video: string[] }> = {
+  intl: {
+    chat:  ['agnes-2.5-flash', 'agnes-2.0-flash'],
+    image: ['agnes-image-2.1-flash', 'agnes-image-2.0-flash'],
+    video: ['agnes-video-v2.0'],
+  },
+  cn: {
+    chat:  ['agnes-2.5-flash', 'agnes-3.0-flash', 'agnes-2.5-pro'],
+    image: ['agnes-image-2.1-flash', 'agnes-image-2.5-flash'],
+    video: ['agnes-video-2.5-flash', 'agnes-video-2.5'],
+  },
+};
+
+const modelCache = new Map<SiteId, { at: number; data: any }>();
+
+function classifyModels(ids: string[]) {
+  const isVideo = (id: string) => /video/i.test(id);
+  const isImage = (id: string) => /image/i.test(id);
+  const isOther = (id: string) => /embed|tts|whisper|rerank|moderation/i.test(id);
+  return {
+    chat:  ids.filter(id => !isVideo(id) && !isImage(id) && !isOther(id)),
+    image: ids.filter(isImage),
+    video: ids.filter(isVideo),
+  };
+}
+
+async function modelsFor(site: SiteId) {
+  const cached = modelCache.get(site);
+  if (cached && Date.now() - cached.at < 5 * 60_000) return cached.data;
+
+  const key = apiKeys[site];
+  let data: any = null;
+
+  if (key) {
+    try {
+      const { data: raw } = await axios.get(`${SITES[site].baseUrl}/models`, {
+        headers: { Authorization: `Bearer ${key}` },
+        timeout: 10_000,
+      });
+      const ids: string[] = (raw?.data ?? []).map((m: any) => m?.id).filter(Boolean);
+      if (ids.length) data = { ...classifyModels(ids), source: 'live' };
+    } catch { /* 走兜底列表 */ }
+  }
+
+  if (!data) data = { ...MODEL_FALLBACK[site], source: key ? 'fallback' : 'offline' };
+
+  modelCache.set(site, { at: Date.now(), data });
+  return data;
+}
+
+app.get('/api/models', async (_req, res) => {
+  try {
+    const data = await modelsFor(currentSite);
+    res.json({ ...data, site: currentSite });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Chat completions ────────────────────────────────────────────────────────
@@ -124,7 +256,7 @@ app.post('/api/config', (req, res) => {
 app.post('/api/chat', async (req, res) => {
   const { _saveFormat = 'txt', ...body } = req.body as Record<string, unknown>;
   try {
-    const { data } = await axios.post(`${BASE_URL}/chat/completions`, body, {
+    const { data } = await axios.post(`${baseUrl()}/chat/completions`, body, {
       headers: authHeaders(),
       timeout: 120_000,
     });
@@ -175,7 +307,7 @@ app.post('/api/chat/stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   try {
     const { data: stream } = await axios.post(
-      `${BASE_URL}/chat/completions`,
+      `${baseUrl()}/chat/completions`,
       { ...body, stream: true },
       { headers: authHeaders(), responseType: 'stream', timeout: 120_000 }
     );
@@ -194,7 +326,7 @@ app.post('/api/image', async (req, res) => {
     const rawImages: string[] = req.body.extra_body?.image ?? [];
     const { forMeta } = rawImages.length ? processImages(rawImages) : { forMeta: [] };
 
-    const { data } = await axios.post(`${BASE_URL}/images/generations`, req.body, {
+    const { data } = await axios.post(`${baseUrl()}/images/generations`, req.body, {
       headers: authHeaders(),
       timeout: 180_000,
     });
@@ -236,7 +368,7 @@ app.post('/api/video', async (req, res) => {
       : (req.body.extra_body?.image ?? []);
     const { forMeta } = rawImages.length ? processImages(rawImages) : { forMeta: [] };
 
-    const { data } = await axios.post(`${BASE_URL}/videos`, req.body, {
+    const { data } = await axios.post(`${baseUrl()}/videos`, req.body, {
       headers: authHeaders(),
       timeout: 120_000,
     });
@@ -270,7 +402,7 @@ app.post('/api/video', async (req, res) => {
 
 app.get('/api/video/:taskId', async (req, res) => {
   try {
-    const { data } = await axios.get(`${BASE_URL}/videos/${req.params.taskId}`, {
+    const { data } = await axios.get(`${baseUrl()}/videos/${req.params.taskId}`, {
       headers: authHeaders(),
       timeout: 30_000,
     });
@@ -327,6 +459,32 @@ app.get('/api/outputs', (_req, res) => {
   res.json(result);
 });
 
+// ── 旧版 Key 的站点归属识别 ─────────────────────────────────────────────────
+
+// 老版本 .env 里只有 AGNES_API_KEY，没有记录站点。
+// 启动时用这把 Key 探测一次，确认它属于国内站还是国际站，然后写回 .env。
+async function detectLegacyKeySite(): Promise<void> {
+  if (normalizeSite(process.env.AGNES_SITE)) return;   // 已经明确记录过站点
+  if (!legacyKey) return;
+
+  for (const id of SITE_IDS) {
+    try {
+      await axios.get(`${SITES[id].baseUrl}/models`, {
+        headers: { Authorization: `Bearer ${legacyKey}` },
+        timeout: 6_000,
+      });
+      if (id !== currentSite || apiKeys[id] !== legacyKey) {
+        for (const s of SITE_IDS) if (apiKeys[s] === legacyKey) apiKeys[s] = '';
+        currentSite = id;
+        apiKeys[id] = legacyKey;
+        persistSiteState();
+      }
+      console.log(`  ✓ 已识别旧 Key 属于：${SITES[id].label}\n`);
+      return;
+    } catch { /* 这把 Key 在该站无效，继续试下一个 */ }
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT) || 6430;
@@ -342,6 +500,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  Agnes AI Studio`);
   console.log(`  本机：    http://localhost:${PORT}`);
   for (const ip of lanIps) console.log(`  局域网：  http://${ip}:${PORT}`);
+  console.log(`  站点：    ${SITES[currentSite].label}  ${baseUrl()}`);
   console.log('');
-  if (!API_KEY) console.warn('  ⚠  AGNES_API_KEY 未在 .env 中设置\n');
+  if (!activeKey()) {
+    console.warn(`  ⚠  ${SITES[currentSite].label}的 API Key 未设置，请在页面顶部填写\n`);
+  }
+  void detectLegacyKeySite();
 });
